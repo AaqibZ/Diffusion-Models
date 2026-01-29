@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diffusion Model Recommender</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .question-section {
+            margin-bottom: 30px;
+            padding: 25px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .question-section h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+
+        .question-section p {
+            color: #666;
+            margin-bottom: 15px;
+            line-height: 1.6;
+        }
+
+        .options {
+            display: grid;
+            gap: 10px;
+        }
+
+        .option {
+            display: flex;
+            align-items: center;
+            padding: 12px 15px;
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .option:hover {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+
+        .option input[type="radio"] {
+            margin-right: 10px;
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .option label {
+            cursor: pointer;
+            flex: 1;
+        }
+
+        .option input[type="radio"]:checked + label {
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .yes-no-buttons {
+            display: flex;
+            gap: 15px;
+        }
+
+        .yes-no-buttons button {
+            flex: 1;
+            padding: 15px;
+            font-size: 1.1em;
+            border: 2px solid #e0e0e0;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .yes-no-buttons button:hover {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+
+        .yes-no-buttons button.selected {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .nav-buttons {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 30px;
+            padding-top: 30px;
+            border-top: 2px solid #e0e0e0;
+        }
+
+        .btn {
+            padding: 15px 40px;
+            font-size: 1.1em;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 600;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #e0e0e0;
+            color: #666;
+        }
+
+        .btn-secondary:hover {
+            background: #d0d0d0;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            margin-bottom: 30px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s;
+        }
+
+        .results {
+            display: none;
+        }
+
+        .results.active {
+            display: block;
+        }
+
+        .recommendation-card {
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 25px;
+            margin-bottom: 20px;
+            transition: all 0.3s;
+        }
+
+        .recommendation-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .recommendation-card.top-pick {
+            border: 3px solid #667eea;
+            background: linear-gradient(135deg, #f0f4ff 0%, #fff 100%);
+        }
+
+        .rank-badge {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            background: #667eea;
+            color: white;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 40px;
+            font-weight: bold;
+            font-size: 1.2em;
+            margin-right: 15px;
+        }
+
+        .rank-badge.gold {
+            background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
+        }
+
+        .model-name {
+            font-size: 1.8em;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .score {
+            font-size: 1.2em;
+            color: #667eea;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .property-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 15px 0;
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 5px 12px;
+            background: #e0e0e0;
+            border-radius: 20px;
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .tag.highlight {
+            background: #667eea;
+            color: white;
+        }
+
+        .description {
+            color: #666;
+            line-height: 1.6;
+            margin: 10px 0;
+        }
+
+        .reasoning {
+            background: #f8f9fa;
+            padding: 15px;
+            border-left: 4px solid #667eea;
+            border-radius: 5px;
+            margin-top: 15px;
+        }
+
+        .validation-box {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .validation-box h3 {
+            color: #856404;
+            margin-bottom: 10px;
+        }
+
+        .export-section {
+            text-align: center;
+            padding: 30px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            margin-top: 30px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.8em;
+            }
+
+            .content {
+                padding: 20px;
+            }
+
+            .yes-no-buttons {
+                flex-direction: column;
+            }
+
+            .nav-buttons {
+                flex-direction: column;
+                gap: 10px;
+            }
+        }
+
+        .scenario-insight {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+
+        .scenario-insight h4 {
+            color: #1976d2;
+            margin-bottom: 8px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .download-btn {
+            background: #28a745;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.1em;
+            margin: 10px;
+            transition: all 0.3s;
+        }
+
+        .download-btn:hover {
+            background: #218838;
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔬 Diffusion Model Recommender</h1>
+            <p>Research-validated guidance for influence maximization on temporal networks</p>
+        </div>
+
+        <div class="content">
+            <!-- Progress Bar -->
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+
+            <!-- Questions Container -->
+            <div id="questionsContainer"></div>
+
+            <!-- Navigation Buttons -->
+            <div class="nav-buttons">
+                <button class="btn btn-secondary" id="prevBtn" onclick="previousQuestion()">Previous</button>
+                <button class="btn btn-primary" id="nextBtn" onclick="nextQuestion()">Next</button>
+            </div>
+
+            <!-- Results Container -->
+            <div id="resultsContainer" class="results"></div>
+        </div>
+    </div>
+
+    <script>
+        // Complete model database from the paper
+        const MODELS = {
+            "IC": {taxonomy: "Process-Predictive-Cascade", temporal: true, competitive: false, behavioral: false, submodular: true, monotone: true, complexity: "NP-hard", best_for: ["viral_marketing", "baseline_cascade"], coverage: "very_high", temporal_accuracy: "medium", description: "Baseline probabilistic cascade model"},
+            "LT": {taxonomy: "Process-Predictive-Threshold", temporal: true, competitive: false, behavioral: false, submodular: false, monotone: false, complexity: "NP-hard", best_for: ["collective_behavior", "threshold_adoption"], coverage: "very_high", temporal_accuracy: "medium", description: "Canonical threshold model for adoption"},
+            "SI": {taxonomy: "Process-Explanatory", temporal: true, competitive: false, behavioral: false, submodular: true, monotone: true, complexity: "Polynomial", best_for: ["epidemic_simple", "irreversible_spread"], coverage: "high", temporal_accuracy: "medium", description: "Susceptible-Infected model for irreversible contagion"},
+            "SIR": {taxonomy: "Process-Explanatory", temporal: true, competitive: false, behavioral: false, submodular: true, monotone: true, complexity: "Polynomial", best_for: ["disease_with_recovery", "realistic_epidemics"], coverage: "high", temporal_accuracy: "medium", description: "Captures immunity effects and recovery dynamics"},
+            "SEIR": {taxonomy: "Process-Explanatory", temporal: true, competitive: false, behavioral: false, submodular: true, monotone: true, complexity: "Polynomial", best_for: ["disease_with_latency", "incubation_delay"], coverage: "high", temporal_accuracy: "high", description: "Includes exposed (latent) state before infection"},
+            "SCIR": {taxonomy: "Process-Explanatory", temporal: false, competitive: true, behavioral: false, submodular: true, monotone: true, complexity: "Polynomial", best_for: ["antimicrobial_resistance", "competitive_spread"], coverage: "medium", temporal_accuracy: "medium", description: "Competitive infection and recovery dynamics"},
+            "irSIR": {taxonomy: "Process-Explanatory", temporal: false, competitive: false, behavioral: true, submodular: true, monotone: true, complexity: "Polynomial", best_for: ["feedback_driven", "saturation_capture"], coverage: "medium", temporal_accuracy: "very_high", description: "Infection rate depends on recovered population - BEST for rumor spreading"},
+            "cpSI-R": {taxonomy: "Process-Explanatory", temporal: true, competitive: false, behavioral: true, submodular: true, monotone: true, complexity: "Polynomial", best_for: ["reinfection", "partial_immunity"], coverage: "high", temporal_accuracy: "high", description: "Temporal SI with partial recovery and reactivation"},
+            "SCM": {taxonomy: "Process-Explanatory", temporal: true, competitive: false, behavioral: false, submodular: false, monotone: false, complexity: "NP-hard", best_for: ["higher_order", "group_interactions"], coverage: "very_high", temporal_accuracy: "very_high", description: "Simplicial Complex Model - BEST for disease progression"},
+            "MTM": {taxonomy: "Process-Predictive-Threshold", temporal: false, competitive: false, behavioral: false, submodular: true, monotone: true, complexity: "NP-hard", best_for: ["voting", "consensus"], coverage: "very_high", temporal_accuracy: "low", description: "Majority Threshold Model for consensus systems"},
+            "STM": {taxonomy: "Process-Predictive-Threshold", temporal: false, competitive: false, behavioral: false, submodular: true, monotone: true, complexity: "NP-hard", best_for: ["fast_triggering", "rapid_spread"], coverage: "very_high", temporal_accuracy: "low", description: "Small Threshold Model for rapid cascades"},
+            "DLT": {taxonomy: "Process-Predictive-Threshold", temporal: true, competitive: false, behavioral: true, submodular: false, monotone: false, complexity: "NP-hard", best_for: ["misinformation", "dynamic_thresholds"], coverage: "medium", temporal_accuracy: "high", description: "Dynamic Linear Threshold with evolving thresholds"},
+            "pELT": {taxonomy: "Process-Predictive-Threshold", temporal: true, competitive: false, behavioral: false, submodular: true, monotone: true, complexity: "NP-hard", best_for: ["persistent_influence", "accumulation"], coverage: "high", temporal_accuracy: "high", description: "Persistent Evolving Linear Threshold"},
+            "tELT": {taxonomy: "Process-Predictive-Threshold", temporal: true, competitive: false, behavioral: false, submodular: true, monotone: true, complexity: "NP-hard", best_for: ["burst_events", "snapshot_based"], coverage: "medium", temporal_accuracy: "medium", description: "Transient Evolving Linear Threshold"},
+            "DRUC": {taxonomy: "Process-Predictive-Threshold", temporal: false, competitive: false, behavioral: true, submodular: true, monotone: true, complexity: "NP-hard", best_for: ["content_aware", "user_centric"], coverage: "very_high", temporal_accuracy: "high", description: "Decaying Reinforced User-Centric model"},
+            "TCC": {taxonomy: "Process-Predictive-Cascade", temporal: true, competitive: false, behavioral: true, submodular: false, monotone: false, complexity: "NP-hard", best_for: ["memory_effects", "reinforcement"], coverage: "high", temporal_accuracy: "very_high", description: "Time-Dependent Comprehensive Cascade with memory"},
+            "ASIC": {taxonomy: "Process-Predictive-Cascade", temporal: true, competitive: false, behavioral: false, submodular: true, monotone: true, complexity: "NP-hard", best_for: ["scalability", "large_networks"], coverage: "high", temporal_accuracy: "medium", description: "Scalable IC approximation"},
+            "Voter": {taxonomy: "Interaction-Pairwise", temporal: true, competitive: false, behavioral: true, submodular: true, monotone: true, complexity: "Polynomial", best_for: ["consensus", "opinion_formation"], coverage: "medium", temporal_accuracy: "medium", description: "Canonical consensus model"},
+            "EVM": {taxonomy: "Interaction-Pairwise", temporal: false, competitive: false, behavioral: true, submodular: true, monotone: true, complexity: "Polynomial", best_for: ["community_aware", "modular_networks"], coverage: "high", temporal_accuracy: "very_high", description: "Extended Voter Model - BEST for rumor (after irSIR)"},
+            "TAM": {taxonomy: "Interaction-Group", temporal: false, competitive: false, behavioral: true, submodular: true, monotone: true, complexity: "Polynomial", best_for: ["hashtag_diffusion", "topic_adoption"], coverage: "high", temporal_accuracy: "high", description: "Topic Adoption Model"},
+            "POE": {taxonomy: "Interaction-Pairwise", temporal: true, competitive: false, behavioral: true, submodular: false, monotone: false, complexity: "Polynomial", best_for: ["preference_driven", "peer_influence"], coverage: "high", temporal_accuracy: "high", description: "Preference-Oriented Exposure"},
+            "LIM": {taxonomy: "Interaction-Pairwise", temporal: true, competitive: false, behavioral: true, submodular: false, monotone: false, complexity: "NP-hard", best_for: ["role_based", "leader_identification"], coverage: "medium", temporal_accuracy: "medium", description: "Leader Influence Maximization"},
+            "TBCELF": {taxonomy: "Competition", temporal: true, competitive: false, behavioral: false, submodular: true, monotone: true, complexity: "NP-hard", best_for: ["budget_constrained", "cost_effective"], coverage: "high", temporal_accuracy: "high", description: "Temporal Budget-aware - BEST for targeted intervention"},
+            "TIC": {taxonomy: "Competition", temporal: true, competitive: true, behavioral: false, submodular: true, monotone: true, complexity: "NP-hard", best_for: ["fair_competition", "multi_party"], coverage: "high", temporal_accuracy: "high", description: "Timeliness Independent Cascade"},
+            "AtI": {taxonomy: "Competition", temporal: false, competitive: true, behavioral: true, submodular: true, monotone: true, complexity: "NP-hard", best_for: ["awareness_phase", "two_stage"], coverage: "high", temporal_accuracy: "high", description: "Awareness-to-Influence model"},
+            "WPM": {taxonomy: "Competition", temporal: false, competitive: true, behavioral: false, submodular: true, monotone: false, complexity: "NP-hard", best_for: ["wave_propagation", "spatial_spread"], coverage: "high", temporal_accuracy: "high", description: "Wave Propagation Model"},
+            "IML-IC": {taxonomy: "Competition", temporal: false, competitive: true, behavioral: false, submodular: true, monotone: true, complexity: "NP-hard", best_for: ["unwanted_users", "efficient_estimation"], coverage: "high", temporal_accuracy: "medium", description: "Influence Maximization with Limited unwanted users"},
+            "LND": {taxonomy: "Structure-Micro", temporal: false, competitive: false, behavioral: false, submodular: true, monotone: true, complexity: "NP-hard", best_for: ["local_neighborhoods", "peer_influence"], coverage: "medium", temporal_accuracy: "high", description: "Local Neighborhood Diffusion"},
+            "PAM": {taxonomy: "Structure-Micro", temporal: true, competitive: false, behavioral: true, submodular: true, monotone: true, complexity: "NP-hard", best_for: ["product_adoption", "agent_heterogeneity"], coverage: "medium", temporal_accuracy: "high", description: "Product Adopter Model"},
+            "ABBM": {taxonomy: "Structure-Macro", temporal: true, competitive: false, behavioral: false, submodular: true, monotone: true, complexity: "Polynomial", best_for: ["network_bass", "micro_macro"], coverage: "high", temporal_accuracy: "medium", description: "Agent-Based Bass Model"},
+            "BIADM": {taxonomy: "Structure-Macro", temporal: false, competitive: false, behavioral: false, submodular: true, monotone: true, complexity: "Polynomial", best_for: ["aggregate_adoption", "market_forecasting"], coverage: "high", temporal_accuracy: "low", description: "Bass Innovation-Adoption Model"},
+            "VMID": {taxonomy: "Target", temporal: false, competitive: false, behavioral: false, submodular: false, monotone: false, complexity: "NP-hard", best_for: ["viral_marketing", "business_oriented"], coverage: "high", temporal_accuracy: "high", description: "Viral Marketing Information Diffusion - BEST for marketing"},
+            "MAT": {taxonomy: "Target", temporal: true, competitive: false, behavioral: false, submodular: false, monotone: false, complexity: "NP-hard", best_for: ["time_aware_marketing", "seasonal_campaigns"], coverage: "high", temporal_accuracy: "high", description: "Multi-agent Trust-based targeting"},
+            "UAD": {taxonomy: "Target", temporal: true, competitive: false, behavioral: true, submodular: false, monotone: false, complexity: "NP-hard", best_for: ["awareness_tendency", "two_stage_adoption"], coverage: "high", temporal_accuracy: "very_high", description: "User-Aware Diffusion with awareness-tendency stages"},
+            "ISR": {taxonomy: "Target", temporal: true, competitive: false, behavioral: true, submodular: false, monotone: false, complexity: "NP-hard", best_for: ["opinion_evolution", "political_analysis"], coverage: "medium", temporal_accuracy: "medium", description: "Information Spread Reinforcement"},
+        };
+
+        // Scenario recommendations from the paper
+        const SCENARIO_RECOMMENDATIONS = {
+            "rumor_spreading": {
+                top_models: ["irSIR", "EVM", "TAM", "POE"],
+                reasoning: "Paper shows irSIR achieves lowest RMSE on Higgs Twitter dataset. EVM performs well for community-driven rumor dynamics.",
+                avoid: ["MTM", "ABBM"],
+                validation: "Higgs Twitter: irSIR (RMSE: 0.0851), UAD, SI best performers"
+            },
+            "disease_progression": {
+                top_models: ["SCM", "LT", "SI", "SEIR", "WPM", "TAM"],
+                reasoning: "Paper shows SCM and LT achieve near-zero error under deterministic IC(p=1). Structure-driven models excel.",
+                avoid: ["irSIR", "PAM"],
+                validation: "Hospital Ward: SCM, LT, SI, WPM, TAM achieve RMSE ≈ 0.02"
+            },
+            "viral_marketing": {
+                top_models: ["VMID", "SCM", "MAT", "UAD", "IC", "LT"],
+                reasoning: "Target-oriented models designed for marketing. VMID and SCM show best performance on CollegeMsg.",
+                avoid: ["irSIR", "UTM"],
+                validation: "CollegeMsg: SCM, LT (RMSE: 0.02), VMID, MAT top performers"
+            },
+            "competitive_marketing": {
+                top_models: ["TBCELF", "TIC", "AtI", "IML-IC"],
+                reasoning: "Competition-oriented models handle multiple campaigns. TBCELF excels with budget constraints.",
+                avoid: ["SI", "Voter"]
+            },
+            "epidemic_outbreak": {
+                top_models: ["SIR", "SEIR", "SI", "cpSI-R", "SCM"],
+                reasoning: "Classical epidemic models with recovery. SEIR for latency, cpSI-R for reinfection.",
+                avoid: ["IC", "LT"]
+            },
+            "antimicrobial_resistance": {
+                top_models: ["SCIR", "SEIR"],
+                reasoning: "Explanatory models for genetic transmission and stratified interactions.",
+                avoid: ["IC", "Voter"]
+            },
+            "opinion_dynamics": {
+                top_models: ["Voter", "EVM", "ISR", "POE", "LIM"],
+                reasoning: "Interaction-oriented models capture consensus and social influence.",
+                avoid: ["SI", "IC"]
+            },
+            "influencer_marketing": {
+                top_models: ["TAM", "LIM", "VMID"],
+                reasoning: "Group-oriented models identify influential communities.",
+                avoid: ["UTM"]
+            },
+            "misinformation_control": {
+                top_models: ["DLT"],
+                reasoning: "Trust-aware and blocking models for suppressing harmful diffusion.",
+                avoid: ["STM", "MTM"]
+            },
+            "emergency_alerts": {
+                top_models: ["STM", "IC", "SI", "WPM"],
+                reasoning: "Fast-triggering models for rapid dissemination.",
+                avoid: ["UTM"]
+            },
+            "product_adoption": {
+                top_models: ["BIADM", "ABBM", "PAM"],
+                reasoning: "Structure-oriented models for market penetration.",
+                avoid: ["SIR", "SEIR"]
+            },
+            "budget_constrained": {
+                top_models: ["TBCELF", "ASIC"],
+                reasoning: "Models optimized for cost-effective seed selection.",
+                avoid: ["TCC"]
+            }
+        };
+
+        // Questions configuration
+        const questions = [
+            {
+                id: 1,
+                type: "radio",
+                question: "What is your PRIMARY application scenario?",
+                description: "Select the scenario that best matches your use case",
+                options: [
+                    { value: "rumor_spreading", label: "Rumor/information spreading on social media" },
+                    { value: "disease_progression", label: "Disease/epidemic outbreak modeling" },
+                    { value: "viral_marketing", label: "Viral marketing campaign" },
+                    { value: "competitive_marketing", label: "Competitive marketing (multiple brands)" },
+                    { value: "antimicrobial_resistance", label: "Antimicrobial resistance spread" },
+                    { value: "opinion_dynamics", label: "Opinion dynamics / political campaigns" },
+                    { value: "influencer_marketing", label: "Influencer identification" },
+                    { value: "misinformation_control", label: "Misinformation control" },
+                    { value: "emergency_alerts", label: "Emergency alert dissemination" },
+                    { value: "product_adoption", label: "Product adoption forecasting" },
+                    { value: "general", label: "Other (general influence maximization)" }
+                ]
+            },
+            {
+                id: 2,
+                type: "radio",
+                question: "What type of network are you working with?",
+                description: "The temporal structure of your network",
+                options: [
+                    { value: "temporal", label: "Temporal network (time-stamped interactions)" },
+                    { value: "dynamic", label: "Dynamic network (evolving structure)" },
+                    { value: "static", label: "Static network (no temporal information)" }
+                ]
+            },
+            {
+                id: 3,
+                type: "radio",
+                question: "Do you have real diffusion ground truth data?",
+                description: "Validation data availability",
+                options: [
+                    { value: "real", label: "Yes, empirical diffusion traces (like Higgs Twitter)" },
+                    { value: "idealized", label: "No, but can use idealized model (IC with p=1)" },
+                    { value: "none", label: "No ground truth available" }
+                ]
+            },
+            {
+                id: 4,
+                type: "radio",
+                question: "What is your PRIMARY optimization goal?",
+                description: "The main objective you want to achieve",
+                options: [
+                    { value: "accuracy", label: "Maximum accuracy (match real diffusion patterns)" },
+                    { value: "reach", label: "Maximum reach/coverage" },
+                    { value: "fairness", label: "Fairness across competing entities" },
+                    { value: "efficiency", label: "Computational efficiency (low runtime)" },
+                    { value: "cost", label: "Cost-effectiveness (budget constraints)" },
+                    { value: "early_accuracy", label: "Early-stage prediction accuracy" }
+                ]
+            },
+            {
+                id: 5,
+                type: "yesno",
+                question: "Are there competing diffusion processes?",
+                description: "E.g., multiple brands, competing diseases, adversarial influence"
+            },
+            {
+                id: 6,
+                type: "yesno",
+                question: "Do behavioral/psychological factors significantly influence spread?",
+                description: "E.g., opinion formation, trust, preferences, decision-making"
+            },
+            {
+                id: 7,
+                type: "yesno",
+                question: "Does your network have strong community/cluster structure?",
+                description: "Clearly defined groups or communities"
+            },
+            {
+                id: 8,
+                type: "radio",
+                question: "What are your seed selection constraints?",
+                description: "Limitations on how you can select seed nodes",
+                options: [
+                    { value: "none", label: "No constraints (maximize spread)" },
+                    { value: "budget", label: "Budget constraints (limited resources)" },
+                    { value: "fairness", label: "Fairness constraints (balanced across groups)" },
+                    { value: "targeted", label: "Targeted intervention (specific high-value nodes)" }
+                ]
+            },
+            {
+                id: 9,
+                type: "radio",
+                question: "What temporal characteristics are important?",
+                description: "Which aspect of the diffusion timeline matters most",
+                options: [
+                    { value: "early", label: "Early-stage accuracy (initial spread)" },
+                    { value: "final", label: "Long-term saturation (final coverage)" },
+                    { value: "peak", label: "Peak timing (when maximum spread occurs)" },
+                    { value: "full", label: "Entire temporal trajectory" }
+                ]
+            },
+            {
+                id: 10,
+                type: "yesno",
+                question: "Do you require guaranteed approximation bounds?",
+                description: "I.e., submodular + monotone properties for greedy algorithms"
+            },
+            {
+                id: 11,
+                type: "radio",
+                question: "What is your network size?",
+                description: "Approximate number of nodes in your network",
+                options: [
+                    { value: "small", label: "Small (<1,000 nodes)" },
+                    { value: "medium", label: "Medium (1,000-10,000 nodes)" },
+                    { value: "large", label: "Large (10,000-100,000 nodes)" },
+                    { value: "very_large", label: "Very large (>100,000 nodes)" }
+                ]
+            },
+            {
+                id: 12,
+                type: "radio",
+                question: "Does your scenario involve any special features?",
+                description: "Unique characteristics of your diffusion process",
+                options: [
+                    { value: "reinfection", label: "Reinfection / reactivation dynamics" },
+                    { value: "recovery", label: "Recovery mechanisms" },
+                    { value: "latency", label: "Latency / incubation periods" },
+                    { value: "trust", label: "Trust / distrust relationships" },
+                    { value: "memory", label: "Memory effects (past attempts matter)" },
+                    { value: "none", label: "None of the above" }
+                ]
+            },
+            {
+                id: 13,
+                type: "yesno",
+                question: "Should recommendations prioritize research validation?",
+                description: "Prefer models validated in the research paper"
+            }
+        ];
+
+        // State management
+        let currentQuestion = 0;
+        let answers = {};
+        let modelWeights = {};
+
+        // Initialize weights
+        Object.keys(MODELS).forEach(model => {
+            modelWeights[model] = 1.0;
+        });
+
+        // Load saved weights from localStorage
+        function loadWeights() {
+            const saved = localStorage.getItem('diffusion_model_weights');
+            if (saved) {
+                modelWeights = JSON.parse(saved);
+            }
+        }
+
+        // Save weights to localStorage
+        function saveWeights() {
+            localStorage.setItem('diffusion_model_weights', JSON.stringify(modelWeights));
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            loadWeights();
+            renderQuestion();
+            updateProgress();
+        });
+
+        // Render current question
+        function renderQuestion() {
+            const container = document.getElementById('questionsContainer');
+            const question = questions[currentQuestion];
+            
+            let html = `
+                <div class="question-section">
+                    <h3>Question ${currentQuestion + 1} of ${questions.length}</h3>
+                    <p><strong>${question.question}</strong></p>
+                    <p class="description">${question.description || ''}</p>
+            `;
+
+            if (question.type === 'radio') {
+                html += '<div class="options">';
+                question.options.forEach((option, index) => {
+                    const checked = answers[currentQuestion] === option.value ? 'checked' : '';
+                    html += `
+                        <div class="option">
+                            <input type="radio" id="q${currentQuestion}_${index}" 
+                                   name="q${currentQuestion}" value="${option.value}" 
+                                   ${checked} onchange="saveAnswer('${option.value}')">
+                            <label for="q${currentQuestion}_${index}">${option.label}</label>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+            } else if (question.type === 'yesno') {
+                const yesSelected = answers[currentQuestion] === true ? 'selected' : '';
+                const noSelected = answers[currentQuestion] === false ? 'selected' : '';
+                html += `
+                    <div class="yes-no-buttons">
+                        <button class="${yesSelected}" onclick="saveYesNo(true)">Yes</button>
+                        <button class="${noSelected}" onclick="saveYesNo(false)">No</button>
+                    </div>
+                `;
+            }
+
+            html += '</div>';
+            container.innerHTML = html;
+
+            // Update buttons
+            document.getElementById('prevBtn').disabled = currentQuestion === 0;
+            document.getElementById('nextBtn').textContent = 
+                currentQuestion === questions.length - 1 ? 'Get Recommendations' : 'Next';
+        }
+
+        // Save answer
+        function saveAnswer(value) {
+            answers[currentQuestion] = value;
+        }
+
+        // Save yes/no answer
+        function saveYesNo(value) {
+            answers[currentQuestion] = value;
+            
+            // Update button styling
+            const buttons = event.target.parentElement.querySelectorAll('button');
+            buttons.forEach(btn => btn.classList.remove('selected'));
+            event.target.classList.add('selected');
+        }
+
+        // Navigate to next question
+        function nextQuestion() {
+            if (answers[currentQuestion] === undefined) {
+                alert('Please answer the current question before proceeding.');
+                return;
+            }
+
+            if (currentQuestion < questions.length - 1) {
+                currentQuestion++;
+                renderQuestion();
+                updateProgress();
+            } else {
+                showResults();
+            }
+        }
+
+        // Navigate to previous question
+        function previousQuestion() {
+            if (currentQuestion > 0) {
+                currentQuestion--;
+                renderQuestion();
+                updateProgress();
+            }
+        }
+
+        // Update progress bar
+        function updateProgress() {
+            const progress = ((currentQuestion + 1) / questions.length) * 100;
+            document.getElementById('progressFill').style.width = progress + '%';
+        }
+
+        // Score models based on answers
+        function scoreModels() {
+            const scores = {};
+            
+            // Parse answers
+            const scenario = answers[0] || 'general';
+            const networkType = answers[1] || 'static';
+            const groundTruth = answers[2] || 'none';
+            const goal = answers[3] || 'reach';
+            const competition = answers[4] || false;
+            const behavioral = answers[5] || false;
+            const community = answers[6] || false;
+            const seedConstraint = answers[7] || 'none';
+            const timing = answers[8] || 'full';
+            const requireGuarantees = answers[9] || false;
+            const networkSize = answers[10] || 'medium';
+            const specialFeature = answers[11] || 'none';
+            const prioritizeValidation = answers[12] || false;
+
+            const scenarioRec = SCENARIO_RECOMMENDATIONS[scenario] || {};
+            const temporal = networkType === 'temporal' || networkType === 'dynamic';
+
+            Object.keys(MODELS).forEach(model => {
+                const props = MODELS[model];
+                let score = modelWeights[model] || 1.0;
+                let reasons = [];
+
+                // Scenario match (highest weight)
+                if (scenarioRec.top_models && scenarioRec.top_models.includes(model)) {
+                    score += 5.0;
+                    reasons.push(`Top recommendation for ${scenario.replace('_', ' ')}`);
+                }
+                if (scenarioRec.avoid && scenarioRec.avoid.includes(model)) {
+                    score -= 3.0;
+                    reasons.push(`Not recommended for ${scenario.replace('_', ' ')}`);
+                }
+
+                // Temporal support
+                if (temporal && props.temporal) {
+                    score += 2.5;
+                    reasons.push("Supports temporal dynamics");
+                } else if (temporal && !props.temporal) {
+                    score -= 2.0;
+                }
+
+                // Competition
+                if (competition && props.competitive) {
+                    score += 3.5;
+                    reasons.push("Handles competitive diffusion");
+                } else if (competition && !props.competitive) {
+                    score -= 1.5;
+                }
+
+                // Behavioral factors
+                if (behavioral && props.behavioral) {
+                    score += 3.0;
+                    reasons.push("Incorporates behavioral dynamics");
+                }
+
+                // Network size
+                if (networkSize === 'very_large') {
+                    if (props.complexity === 'Polynomial') {
+                        score += 2.0;
+                        reasons.push("Scalable (polynomial complexity)");
+                    }
+                }
+
+                // Goal-specific scoring
+                if (goal === 'accuracy') {
+                    if (props.temporal_accuracy === 'very_high') {
+                        score += 4.0;
+                        reasons.push("Very high temporal accuracy");
+                    } else if (props.temporal_accuracy === 'high') {
+                        score += 2.5;
+                        reasons.push("High temporal accuracy");
+                    }
+                }
+
+                if (goal === 'reach') {
+                    if (props.coverage === 'very_high') {
+                        score += 4.0;
+                        reasons.push("Very high coverage");
+                    } else if (props.coverage === 'high') {
+                        score += 2.5;
+                        reasons.push("High coverage");
+                    }
+                }
+
+                if (goal === 'efficiency' && props.complexity === 'Polynomial') {
+                    score += 3.5;
+                    reasons.push("Computationally efficient");
+                }
+
+                if (goal === 'cost' && seedConstraint === 'budget') {
+                    if (model === 'TBCELF') {
+                        score += 5.0;
+                        reasons.push("★ BEST for budget-constrained scenarios");
+                    }
+                }
+
+                // Special features
+                if (specialFeature === 'reinfection' && model.includes('cpSI-R')) {
+                    score += 3.0;
+                    reasons.push("Handles reinfection dynamics");
+                }
+                if (specialFeature === 'latency' && model === 'SEIR') {
+                    score += 3.0;
+                    reasons.push("Models latency periods");
+                }
+                if (specialFeature === 'memory' && model === 'TCC') {
+                    score += 3.5;
+                    reasons.push("Captures memory effects");
+                }
+
+                // Guarantees
+                if (requireGuarantees) {
+                    if (props.submodular && props.monotone) {
+                        score += 2.0;
+                        reasons.push("Provides approximation guarantees");
+                    } else {
+                        score -= 1.5;
+                    }
+                }
+
+                scores[model] = {
+                    score: score,
+                    reasons: reasons
+                };
+            });
+
+            // Sort by score
+            return Object.entries(scores)
+                .map(([model, data]) => ({
+                    model: model,
+                    score: data.score,
+                    reasons: data.reasons.join('; ')
+                }))
+                .sort((a, b) => b.score - a.score);
+        }
+
+        // Show results
+        function showResults() {
+            const container = document.getElementById('questionsContainer');
+            container.style.display = 'none';
+            document.querySelector('.nav-buttons').style.display = 'none';
+
+            const resultsContainer = document.getElementById('resultsContainer');
+            resultsContainer.classList.add('active');
+
+            // Show loading
+            resultsContainer.innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Analyzing your requirements and ranking 34 diffusion models...</p>
+                </div>
+            `;
+
+            // Simulate processing delay
+            setTimeout(() => {
+                const ranked = scoreModels();
+                displayRecommendations(ranked);
+            }, 1500);
+        }
+
+        // Display recommendations
+        function displayRecommendations(ranked) {
+            const scenario = answers[0] || 'general';
+            const scenarioRec = SCENARIO_RECOMMENDATIONS[scenario] || {};
+            
+            let html = '<h2>🎯 Your Personalized Recommendations</h2>';
+
+            // Scenario insight
+            if (scenarioRec.reasoning) {
+                html += `
+                    <div class="scenario-insight">
+                        <h4>📊 Scenario: ${scenario.replace(/_/g, ' ').toUpperCase()}</h4>
+                        <p><strong>Expert Insight:</strong> ${scenarioRec.reasoning}</p>
+                        ${scenarioRec.validation ? `<p><strong>Validation:</strong> ${scenarioRec.validation}</p>` : ''}
+                    </div>
+                `;
+            }
+
+            // Top recommendations
+            ranked.slice(0, 7).forEach((item, index) => {
+                const props = MODELS[item.model];
+                const isTopPick = index === 0;
+                const rankClass = index === 0 ? 'gold' : '';
+                
+                html += `
+                    <div class="recommendation-card ${isTopPick ? 'top-pick' : ''}">
+                        <div style="display: flex; align-items: center; margin-bottom: 15px;">
+                            <span class="rank-badge ${rankClass}">${index + 1}</span>
+                            <div>
+                                <div class="model-name">${item.model}</div>
+                                <div class="score">Score: ${item.score.toFixed(2)}</div>
+                            </div>
+                        </div>
+                        
+                        <div class="property-tags">
+                            <span class="tag highlight">${props.taxonomy}</span>
+                            ${props.temporal ? '<span class="tag">Temporal</span>' : ''}
+                            ${props.competitive ? '<span class="tag">Competitive</span>' : ''}
+                            ${props.behavioral ? '<span class="tag">Behavioral</span>' : ''}
+                            ${props.submodular && props.monotone ? '<span class="tag highlight">Guarantees ✓</span>' : ''}
+                            <span class="tag">Complexity: ${props.complexity}</span>
+                        </div>
+                        
+                        <p class="description">${props.description}</p>
+                        
+                        <div style="margin: 10px 0;">
+                            <strong>Coverage:</strong> ${props.coverage.replace('_', ' ')} | 
+                            <strong>Temporal Accuracy:</strong> ${props.temporal_accuracy.replace('_', ' ')}
+                        </div>
+                        
+                        ${item.reasons ? `
+                            <div class="reasoning">
+                                <strong>Why recommended:</strong><br>
+                                ${item.reasons}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            });
+
+            // Models to avoid
+            if (scenarioRec.avoid && scenarioRec.avoid.length > 0) {
+                html += `
+                    <div class="validation-box">
+                        <h3>⚠️ Models to Avoid for This Scenario</h3>
+                        <p><strong>${scenarioRec.avoid.join(', ')}</strong></p>
+                        <p>These models showed poor performance or are not suitable for ${scenario.replace(/_/g, ' ')} scenarios based on empirical validation.</p>
+                    </div>
+                `;
+            }
+
+            // Export section
+            html += `
+                <div class="export-section">
+                    <h3>📥 Export Your Results</h3>
+                    <p>Download your personalized recommendations for reference</p>
+                    <button class="download-btn" onclick="exportResults(${JSON.stringify(ranked).replace(/"/g, '&quot;')})">
+                        Download as JSON
+                    </button>
+                    <button class="btn btn-primary" onclick="location.reload()" style="margin: 10px;">
+                        Start New Analysis
+                    </button>
+                </div>
+            `;
+
+            document.getElementById('resultsContainer').innerHTML = html;
+        }
+
+        // Export results to JSON
+        function exportResults(ranked) {
+            const exportData = {
+                scenario: answers[0],
+                timestamp: new Date().toISOString(),
+                answers: answers,
+                recommendations: ranked.slice(0, 10).map((item, index) => ({
+                    rank: index + 1,
+                    model: item.model,
+                    score: item.score,
+                    reasoning: item.reasons,
+                    properties: MODELS[item.model]
+                }))
+            };
+
+            const dataStr = JSON.stringify(exportData, null, 2);
+            const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+            
+            const exportFileDefaultName = `diffusion_recommendations_${answers[0]}_${new Date().toISOString().split('T')[0]}.json`;
+            
+            const linkElement = document.createElement('a');
+            linkElement.setAttribute('href', dataUri);
+            linkElement.setAttribute('download', exportFileDefaultName);
+            linkElement.click();
+        }
+    </script>
+</body>
+</html>
