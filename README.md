@@ -548,7 +548,7 @@ A: Yes, but prioritize polynomial-complexity models (SI, SIR, SEIR, Voter, EVM).
 A: Select "idealized" (IC with p=1) or "none" - the system will still provide valid recommendations.
 
 **Q: Are these models implemented in the code?**
-A: No, this is a recommendation system. You must implement the models yourself.
+A: Yes, this is a recommendation system. You can implement the models by selecting the datasets and python files for choosen class.
 
 **Q: How accurate are these recommendations?**
 A: Based on empirical validation across 9 real-world datasets with 86 models. See paper for details.
