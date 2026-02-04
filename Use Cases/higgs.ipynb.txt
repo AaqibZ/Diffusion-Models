@@ -1,0 +1,224 @@
+import numpy as np
+import networkx as nx
+import matplotlib.pyplot as plt
+import pandas as pd
+import random
+
+from diffusion import get_curves
+from sklearn.metrics import mean_squared_error, mean_absolute_error
+
+# -------------------------
+# PARAMETERS
+# -------------------------
+TIME_BINS = 34
+SEED_COUNTS = [5, 10, 15, 20]
+MAX_STEPS = 3
+N = 304691
+
+random.seed(42)
+np.random.seed(42)
+
+# -------------------------
+# GROUND TRUTH (FRACTION)
+# -------------------------
+ground_truth = np.array([
+    1e-4,2e-4,4e-4,7e-4,1.2e-3,2e-3,3e-3,
+    5e-3,8e-3,1.2e-2,1.6e-2,2.5e-2,
+    4e-2,6e-2,8e-2,1e-1,
+    2e-1,4e-1,6e-1,7e-1,8e-1,9e-1,
+    9.5e-1,9.7e-1,9.8e-1,9.85e-1,
+    9.9e-1,9.93e-1,9.95e-1,9.96e-1,
+    9.97e-1,9.98e-1,9.985e-1,9.99e-1
+])[:TIME_BINS]
+
+# -------------------------
+# MODEL ORDER (FIXED)
+# -------------------------
+MODEL_ORDER = [
+    "SCM","irSIR","EVM","TAM","POE","WPM","STM","AtI",
+    "IC","LT","SI","SIR","LND","PAM","VMID","MAT","UAD"
+]
+
+# -------------------------
+# PRECOMPUTE MODEL CURVES
+# -------------------------
+# get_curves(k) must return a dict or ordered mapping:
+# {1: curve1, 2: curve2, ..., 17: curve17}
+CURVES = {k: get_curves(k) for k in SEED_COUNTS}
+
+# -------------------------
+# LOAD HIGGS NETWORK
+# -------------------------
+edges = []
+with open("higgs_data.txt") as f:
+    for line in f:
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        u, v = int(parts[0]), int(parts[1])
+        edges.append((u, v))
+
+G = nx.DiGraph()
+G.add_edges_from(edges)
+
+# -------------------------
+# SEED SELECTION
+# -------------------------
+def select_seeds(G, k):
+    return [v for v, _ in sorted(
+        G.out_degree(), key=lambda x: x[1], reverse=True
+    )[:k]]
+
+# -------------------------
+# ABBM MODEL
+# -------------------------
+def ABBM(G, seeds):
+    active = set(seeds)
+    for _ in range(MAX_STEPS):
+        for v in G.nodes():
+            if v in active:
+                continue
+            influence = sum(u in active for u in G.predecessors(v))
+            if random.random() < 0.05 + 0.3 * influence:
+                active.add(v)
+    return active
+
+# -------------------------
+# MTM MODEL
+# -------------------------
+def MTM(G, seeds):
+    thresholds = {v: random.random() for v in G.nodes()}
+    active = set(seeds)
+    for _ in range(MAX_STEPS):
+        new = set()
+        for v in G.nodes():
+            if v in active:
+                continue
+            preds = list(G.predecessors(v))
+            prod = 1.0
+            for p in preds:
+                prod *= (1.0 if p in active else 0.0)
+            if prod >= thresholds[v]:
+                new.add(v)
+        active |= new
+    return active
+
+# -------------------------
+# PLOTTING
+# -------------------------
+fig, axes = plt.subplots(1, 4, figsize=(22, 5), sharey=True)
+
+markers = ["o","s","^","v","D","x","+","*","p","h",
+           "<",">","P","X","d","|","_"]
+
+results = {}
+
+for ax, k in zip(axes, SEED_COUNTS):
+
+    # ---- Ground Truth ----
+    ax.plot(
+        ground_truth,
+        linestyle="--",
+        linewidth=3,
+        color="black",
+        label="Ground Truth"
+    )
+
+    table_rows = []
+
+    # ---- Provided Models ----
+    for i, (name, curve) in enumerate(
+        zip(MODEL_ORDER, CURVES[k].values())
+    ):
+        spread = curve[:TIME_BINS]
+
+        ax.plot(
+            spread,
+            linestyle="--",
+            marker=markers[i % len(markers)],
+            markevery=4,
+            alpha=0.85,
+            label=name
+        )
+
+        rmse = np.sqrt(mean_squared_error(ground_truth, spread))
+        mae  = mean_absolute_error(ground_truth, spread)
+        peak = abs(spread.max() - ground_truth.max())
+        final_err = abs(spread[-1] - ground_truth[-1])
+        final_frac = spread[-1]
+
+        table_rows.append(
+            [name, rmse, mae, peak, final_err, final_frac]
+        )
+
+    # ---- ABBM & MTM ----
+    seeds = select_seeds(G, k)
+
+    abbm_active = len(ABBM(G, seeds)) / N
+    mtm_active  = len(MTM(G, seeds)) / N
+
+    abbm_curve = np.linspace(k / N, abbm_active, TIME_BINS)
+    mtm_curve  = np.linspace(k / N, mtm_active, TIME_BINS)
+
+    for name, curve, mk in [
+        ("ABBM", abbm_curve, "X"),
+        ("MTM",  mtm_curve,  "P")
+    ]:
+        ax.plot(
+            curve,
+            linestyle="--",
+            marker=mk,
+            markevery=4,
+            label=name
+        )
+
+        rmse = np.sqrt(mean_squared_error(ground_truth, curve))
+        mae  = mean_absolute_error(ground_truth, curve)
+        peak = abs(curve.max() - ground_truth.max())
+        final_err = abs(curve[-1] - ground_truth[-1])
+        final_frac = curve[-1]
+
+        table_rows.append(
+            [name, rmse, mae, peak, final_err, final_frac]
+        )
+
+    results[k] = pd.DataFrame(
+        table_rows,
+        columns=[
+            "Model",
+            "RMSE",
+            "MAE",
+            "PeakError",
+            "FinalError",
+            "FinalActivatedFraction"
+        ]
+    )
+
+    ax.set_title(f"k = {k}", fontsize=14)
+    ax.set_xlabel("Time bins")
+    ax.set_ylim(0, 1.02)
+
+axes[0].set_ylabel("Fraction of activated users")
+
+# -------------------------
+# GLOBAL LEGEND
+# -------------------------
+handles, labels = axes[0].get_legend_handles_labels()
+fig.legend(
+    handles,
+    labels,
+    loc="upper center",
+    ncol=9,
+    frameon=True
+)
+
+fig.tight_layout(rect=[0, 0, 1, 0.88])
+plt.savefig("higgsdiffusion.pdf", format="pdf", bbox_inches="tight")
+plt.show()
+
+# -------------------------
+# PRINT TABLES
+# -------------------------
+for k, df in results.items():
+    print(f"\n===== METRICS (k = {k}) =====")
+    print(df.round(4))
