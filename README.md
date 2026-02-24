@@ -511,6 +511,7 @@ Potential additions:
 "Diffusion Models for Influence Maximization on Temporal Networks: A Guide to Make the Best Choice"
 Authors: Aaqib Zahoor, Iqra Altaf Gillani, Janibul Bashir
 Institution: National Institute of Technology, Srinagar
+arXiv: https://www.arxiv.org/abs/2507.22589
 
 **Key Citations:**
 - Kempe et al. (2003): Independent Cascade & Linear Threshold
