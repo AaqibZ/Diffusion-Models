@@ -1,4 +1,4 @@
-# Reviewer #1: Statistical Uncertainty Analysis
+# Revision: Statistical Uncertainty Analysis
 
 This directory contains the additional experiments conducted in response
 to Reviewer's comment regarding statistical uncertainty and the inclusion
