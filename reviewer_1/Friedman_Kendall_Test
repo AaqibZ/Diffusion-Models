@@ -1,0 +1,290 @@
+import os
+import itertools
+import numpy as np
+import pandas as pd
+
+from scipy.stats import friedmanchisquare, wilcoxon
+from statsmodels.stats.multitest import multipletests
+
+INPUT_FILE = "all_MC_results.csv"
+
+OUTPUT_DIR = "statistical_significance_results"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+ALPHA = 0.05
+
+df = pd.read_csv(INPUT_FILE)
+
+required_columns = [
+    "Category",
+    "Dataset",
+    "Model",
+    "Seed_Size",
+    "Run",
+    "Final_Activation"
+]
+
+missing = [c for c in required_columns if c not in df.columns]
+
+if missing:
+    raise ValueError(
+        "The following required columns are missing from the CSV: "
+        + ", ".join(missing)
+    )
+
+df = df.dropna(subset=required_columns)
+
+df["Seed_Size"] = df["Seed_Size"].astype(int)
+df["Run"] = df["Run"].astype(int)
+
+print("Total rows:", len(df))
+print("Categories:", df["Category"].unique())
+print("Datasets:", df["Dataset"].unique())
+
+friedman_results = []
+
+group_columns = [
+    "Category",
+    "Dataset",
+    "Seed_Size"
+]
+
+for (category, dataset, k), group in df.groupby(group_columns):
+
+    pivot = group.pivot_table(
+        index="Run",
+        columns="Model",
+        values="Final_Activation",
+        aggfunc="first"
+    )
+
+    pivot = pivot.dropna(axis=0, how="any")
+
+    models = list(pivot.columns)
+
+    if len(models) < 3:
+        continue
+
+    arrays = [
+        pivot[model].values
+        for model in models
+    ]
+
+    statistic, p_value = friedmanchisquare(*arrays)
+
+    n_runs = len(pivot)
+    n_models = len(models)
+
+    kendalls_w = statistic / (n_runs * (n_models - 1))
+
+    decision = (
+        "Rejected"
+        if p_value < ALPHA
+        else "Not Rejected"
+    )
+
+    friedman_results.append({
+        "Category": category,
+        "Dataset": dataset,
+        "Seed_Size": k,
+        "N_Runs": n_runs,
+        "N_Models": n_models,
+        "Friedman_Statistic": statistic,
+        "Friedman_p_value": p_value,
+        "Kendalls_W": kendalls_w,
+        "Decision": decision
+    })
+
+friedman_df = pd.DataFrame(friedman_results)
+
+friedman_df.to_csv(
+    os.path.join(
+        OUTPUT_DIR,
+        "friedman_kendall_results.csv"
+    ),
+    index=False
+)
+
+wilcoxon_results = []
+
+for (category, dataset, k), group in df.groupby(group_columns):
+
+    pivot = group.pivot_table(
+        index="Run",
+        columns="Model",
+        values="Final_Activation",
+        aggfunc="first"
+    )
+
+    pivot = pivot.dropna(axis=0, how="any")
+
+    models = list(pivot.columns)
+
+    pairs = list(
+        itertools.combinations(models, 2)
+    )
+
+    raw_p_values = []
+    pair_records = []
+
+    for model_a, model_b in pairs:
+
+        x = pivot[model_a].values
+        y = pivot[model_b].values
+
+        differences = x - y
+
+        if np.all(differences == 0):
+
+            statistic = 0.0
+            p_value = 1.0
+            n_effective = 0
+
+        else:
+
+            result = wilcoxon(
+                x,
+                y,
+                alternative="two-sided",
+                zero_method="wilcox",
+                method="auto"
+            )
+
+            statistic = result.statistic
+            p_value = result.pvalue
+
+            n_effective = np.sum(
+                differences != 0
+            )
+
+        raw_p_values.append(p_value)
+
+        pair_records.append({
+            "Category": category,
+            "Dataset": dataset,
+            "Seed_Size": k,
+            "Model_A": model_a,
+            "Model_B": model_b,
+            "N_Paired_Runs": len(pivot),
+            "N_Nonzero_Differences": n_effective,
+            "Wilcoxon_Statistic": statistic,
+            "Raw_p_value": p_value
+        })
+
+    if len(raw_p_values) > 0:
+
+        reject, adjusted_p, _, _ = multipletests(
+            raw_p_values,
+            alpha=ALPHA,
+            method="holm"
+        )
+
+        for record, adj_p, rej in zip(
+            pair_records,
+            adjusted_p,
+            reject
+        ):
+
+            record["Holm_Adjusted_p_value"] = adj_p
+            record["Significant"] = (
+                "Yes" if rej else "No"
+            )
+
+            wilcoxon_results.append(record)
+
+wilcoxon_df = pd.DataFrame(
+    wilcoxon_results
+)
+
+wilcoxon_df.to_csv(
+    os.path.join(
+        OUTPUT_DIR,
+        "wilcoxon_holm_results.csv"
+    ),
+    index=False
+)
+
+summary = []
+
+for _, row in friedman_df.iterrows():
+
+    summary.append({
+        "Category": row["Category"],
+        "Dataset": row["Dataset"],
+        "Seed_Size": row["Seed_Size"],
+        "N_Runs": row["N_Runs"],
+        "N_Models": row["N_Models"],
+        "Friedman_Statistic": row[
+            "Friedman_Statistic"
+        ],
+        "Friedman_p_value": row[
+            "Friedman_p_value"
+        ],
+        "Kendalls_W": row[
+            "Kendalls_W"
+        ],
+        "Friedman_Decision": row[
+            "Decision"
+        ]
+    })
+
+summary_df = pd.DataFrame(summary)
+
+summary_df.to_csv(
+    os.path.join(
+        OUTPUT_DIR,
+        "statistical_significance_summary.csv"
+    ),
+    index=False
+)
+
+print("\n" + "=" * 70)
+print("FRIEDMAN TEST RESULTS")
+print("=" * 70)
+
+print(
+    friedman_df.to_string(
+        index=False
+    )
+)
+
+print("\n" + "=" * 70)
+print("SIGNIFICANT PAIRWISE WILCOXON RESULTS")
+print("=" * 70)
+
+significant = wilcoxon_df[
+    wilcoxon_df["Significant"] == "Yes"
+]
+
+if len(significant) == 0:
+
+    print(
+        "No pairwise comparisons remained "
+        "significant after Holm correction."
+    )
+
+else:
+
+    print(
+        significant.to_string(
+            index=False
+        )
+    )
+
+print("\n" + "=" * 70)
+print("OUTPUT FILES")
+print("=" * 70)
+
+print(
+    "1. friedman_kendall_results.csv"
+)
+
+print(
+    "2. wilcoxon_holm_results.csv"
+)
+
+print(
+    "3. statistical_significance_summary.csv"
+)
+
+print("\nResults saved in:", OUTPUT_DIR)
